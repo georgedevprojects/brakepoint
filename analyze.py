@@ -9,6 +9,7 @@
 import argparse
 import json
 import pathlib
+import sys
 import webbrowser
 
 import numpy as np
@@ -184,7 +185,9 @@ def build_report(session, ref_lap, cmp_lap, out_path):
         "map": None if ref["x"] is None else {"x": r(ref["x"], 1), "z": r(ref["z"], 1)},
         "laps": [{"lap": l["lap"], "time": fmt_time(l["time_ms"]), "valid": l["valid"]} for l in session["laps"]],
     }
-    tpl = (pathlib.Path(__file__).parent / "report_template.html").read_text(encoding="utf-8")
+    # inside BrakePoint.exe, bundled files are unpacked to sys._MEIPASS
+    here = pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(__file__).parent))
+    tpl = (here / "report_template.html").read_text(encoding="utf-8")
     html = tpl.replace("__DATA__", json.dumps(data)).replace(
         "__TITLE__", f"{data['track']} - lap {cmp_lap['lap']} vs {ref_lap['lap']}")
     out_path.write_text(html, encoding="utf-8")

@@ -21,44 +21,57 @@ The **track map** is coloured by where you gain (green) and lose (red) time. Cli
 
 ![Zone detail](screenshots/zone.png)
 
-## Quick start (Windows)
+## Download (Windows)
 
-1. Install [Python 3.10+](https://www.python.org/downloads/). On the first installer screen, tick **"Add Python to PATH"**.
-2. Download this repo (green **Code** button → **Download ZIP**) and unzip it.
-3. Double-click **`install.bat`** (one time only).
-4. Double-click **`record.bat`**, then go and drive in ACC. Close the window when you're done.
-5. Double-click **`analyze.bat`**. Your report opens in the browser.
+1. Go to **[Releases](../../releases)** and download **`BrakePoint.exe`**.
+2. Put it in its own folder, e.g. `C:\BrakePoint`. Your sessions and reports are saved next to it.
+3. Double-click it. No Python or install needed.
+
+<img src="screenshots/app.png" width="420" alt="BrakePoint app">
+
+**Using it:**
+
+- Click **Start recording**, then drive in ACC. Each lap appears as you cross the line. Click **Stop** when you're done.
+- Under **Analyse**, pick the lap to analyse and the lap to compare it against (your best is picked for you), then click **Open report**.
+- No ACC to hand? Click **Try demo** to record fake laps and see a report.
+
+> Windows may show a "Windows protected your PC" warning the first time, because the exe isn't code-signed. Click **More info → Run anyway**. The full source is right here if you'd rather run it with Python.
 
 The first out-lap and any laps where you visit the pits are skipped automatically.
 
-### Command-line options
+## Run from source (Python)
+
+1. Install [Python 3.10+](https://www.python.org/downloads/) and tick **"Add Python to PATH"**.
+2. Run `install.bat` once, then `python brakepoint_app.py` for the app.
+
+Or use the command line:
 
 ```
+python recorder.py                     # record (Ctrl+C to stop)
 python analyze.py                      # last lap vs your best
-python analyze.py --lap 5              # lap 5 vs your best
 python analyze.py --lap 5 --ref 3      # lap 5 vs lap 3
-python analyze.py sessions/<file>.json # an older session
 ```
 
-Sessions are saved in `sessions/` and reports in `reports/`.
-
-**No ACC to hand?** Run `python mock_session.py` to generate a demo session, then run `analyze.bat`.
+To build the exe yourself, run `build.bat`. It creates `dist\BrakePoint.exe`.
 
 ## How it works
 
 | File | What it does |
 |---|---|
+| `brakepoint_app.py` | The desktop app (what `BrakePoint.exe` runs): record, stop, pick laps and open reports. |
 | `acc_shm.py` | Reads ACC's shared memory, the same live data feed tools like SimHub use. Read-only and Windows only. |
 | `recorder.py` | Samples speed, pedals, gear and car position 60 times a second and saves each completed lap. |
 | `analyze.py` | Lines laps up by track position, detects braking zones on the reference lap, and measures the time delta, brake point, minimum speed and throttle pickup for each one. |
 | `report_template.html` | The interactive report: speed, delta and pedal traces, a track map, and zone cards. A single self-contained file that works offline. |
-| `mock_session.py` | Generates fake laps on a made-up circuit for testing. |
+| `mock_session.py` | Generates fake laps on a made-up circuit, and replays them as a fake ACC for the app's demo mode. |
+| `.github/workflows/build-exe.yml` | Builds `BrakePoint.exe` on GitHub's Windows servers and attaches it to each release. |
 
 **Why line laps up by track position and not by time?** Two laps reach the same corner at different times. Comparing by position along the track makes sure you're always comparing the same piece of tarmac. The time delta at each point is then simply the difference in elapsed time.
 
 ## Roadmap
 
-- [ ] Choose laps inside the report instead of on the command line
+- [x] Desktop app with lap picker (v1.1)
+- [ ] Switch laps inside the report itself
 - [ ] Live mode: delta to your best braking point on a second screen while driving
 - [ ] Corner names for each track
 - [ ] Compare against another driver's lap file

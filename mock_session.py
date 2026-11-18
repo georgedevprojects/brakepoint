@@ -114,6 +114,51 @@ def make_raw_lap(rng, skill, hz=60):
     return samples
 
 
+class _Obj:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+class FakeACCReader:
+    """Replays mock laps through the same interface as ACCReader.
+
+    Used by the app's demo mode, so BrakePoint can be tried without ACC.
+    """
+
+    def __init__(self, skills=(0.6, 0.85, 1.0, 0.8, 0.92), seed=11, on_finish=None):
+        self.on_finish = on_finish
+        rng = np.random.default_rng(seed)
+        self.frames = []
+        for n, skill in enumerate(skills):
+            self.frames += [(n, s) for s in make_raw_lap(rng, skill)]
+        # a few frames of the next lap so the last lap gets saved
+        self.frames += [(len(skills), s) for s in make_raw_lap(rng, 0.9)[:30]]
+        self.i = 0
+        self.cur = self.frames[0]
+
+    def graphics(self):
+        if self.i >= len(self.frames):
+            if self.on_finish:
+                self.on_finish()
+            return _Obj(status=3)  # paused: replay finished
+        self.cur = self.frames[self.i]
+        self.i += 1
+        n, s = self.cur
+        return _Obj(status=2, completedLaps=n, iCurrentTime=s[0], normalizedCarPosition=s[1],
+                    isInPit=0, activeCars=1, carID=[0], playerCarID=0,
+                    carCoordinates=[[s[7], 0.0, s[8]]])
+
+    def physics(self):
+        _, s = self.cur
+        return _Obj(speedKmh=s[2], gas=s[3], brake=s[4], gear=s[5] + 1, steerAngle=s[6])
+
+    def static(self):
+        return _Obj(track="demo_ring", carModel="demo_gt3")
+
+    def close(self):
+        pass
+
+
 def main():
     rng = np.random.default_rng(7)
     random.seed(7)

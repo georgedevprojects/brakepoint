@@ -22,6 +22,8 @@ def _w(n):
 
 
 def wstr(arr):
+    if isinstance(arr, str):  # demo reader passes plain strings
+        return arr
     return bytes(arr).decode("utf-16-le", errors="ignore").split("\x00", 1)[0]
 
 
