@@ -127,15 +127,20 @@ def tips(z):
     out = []
     bd, td, lost = z["brake_diff_m"], z["throttle_diff_m"], z["time_lost"]
     dv = z["vmin_cmp"] - z["vmin_ref"]
+    # A huge loss, or no braking where the best lap braked, means an incident
+    # (off, lock-up, spin, traffic), not a technique difference - don't coach it.
+    if lost > 0.8 or (bd is None and lost > 0.15):
+        return [f"Lost {lost:.2f}s here. That looks like a mistake (off, lock-up, spin or traffic), "
+                "not a technique gap. Compare a cleaner lap for coaching tips."]
     if bd is None:
-        out.append("No clear brake application found on this lap - check the trace.")
+        out.append("Braking didn't line up with your best lap here. Check the brake trace.")
     elif bd < -8:
         out.append(f"Braked {abs(bd):.0f} m earlier than your best. There's room to brake later.")
     elif bd > 8 and lost > 0.03:
         out.append(f"Braked {bd:.0f} m later than your best but still lost time. Probably overdriving the entry.")
     elif bd > 8:
         out.append(f"Braked {bd:.0f} m later than your best and it worked.")
-    if z["peak_cmp"] < z["peak_ref"] - 0.1:
+    if bd is not None and z["peak_cmp"] < z["peak_ref"] - 0.1:
         out.append(f"Peak brake {z['peak_cmp']:.0%} vs {z['peak_ref']:.0%} on your best. Hit the pedal harder at the start.")
     if dv < -3:
         out.append(f"Minimum speed {abs(dv):.0f} km/h lower. Release the brake earlier and roll more speed to the apex.")
