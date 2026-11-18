@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BrakePoint - __TITLE__</title>
+<style>
+  :root{--bg:#0d0f12;--panel:#15191e;--line:#242a32;--text:#e9ecef;--mute:#87909b;
+        --ref:#8fa0b3;--cmp:#ff5a36;--delta:#ffd23f;--good:#3ddc97;--bad:#ff5a36}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;gap:32px;align-items:flex-end;flex-wrap:wrap}
+  h1{font-size:20px;margin:0 16px 0 0;letter-spacing:.06em;font-weight:800}
+  h1 span{color:var(--cmp)}
+  .stat .k{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.1em}
+  .stat .v{font-size:20px;font-variant-numeric:tabular-nums;font-weight:600}
+  .v.bad{color:var(--bad)} .v.good{color:var(--good)}
+  main{display:grid;grid-template-columns:minmax(0,1fr) 380px}
+  .charts{padding:14px 20px 24px}
+  .toolbar{display:flex;gap:16px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer;font:inherit}
+  button:hover{border-color:var(--mute)}
+  #readout{color:var(--mute);font-variant-numeric:tabular-nums;font-size:13px;min-height:1.4em}
+  .legend{margin-left:auto;display:flex;gap:14px;color:var(--mute);font-size:13px}
+  .sw{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+  .label{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:14px 0 4px}
+  canvas{width:100%;display:block;cursor:crosshair}
+  aside{border-left:1px solid var(--line);padding:16px;height:calc(100vh - 78px);overflow:auto;position:sticky;top:0}
+  .aside-h{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
+  .zone{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:border-color .15s}
+  .zone:hover{border-color:#3a434e}
+  .zone.active{border-color:var(--cmp)}
+  .zone .top{display:flex;justify-content:space-between;align-items:baseline}
+  .zone .name{font-weight:600}
+  .zone .where{color:var(--mute);font-size:12px;margin-left:6px}
+  .loss{font-variant-numeric:tabular-nums;font-weight:700}
+  .loss.bad{color:var(--bad)} .loss.good{color:var(--good)}
+  .zone ul{margin:8px 0 0;padding-left:18px;color:#cdd3d9}
+  .zone li{margin:2px 0}
+  .m{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;font-size:11px;color:var(--mute)}
+  .m b{display:block;color:var(--text);font-weight:500;font-size:13px;font-variant-numeric:tabular-nums}
+  .mapwrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:16px}
+  .maphead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .maphead button{padding:2px 9px;font-size:12px}
+  #map{width:100%;height:300px;cursor:pointer}
+  .mapkey{display:flex;gap:12px;font-size:11px;color:var(--mute);margin-top:4px}
+  .hint{color:var(--mute);font-size:12px;margin-top:12px}
+  @media(max-width:960px){main{grid-template-columns:1fr}aside{border-left:0;border-top:1px solid var(--line);height:auto;position:static}}
+</style>
+</head>
+<body>
+<header>
+  <h1>BRAKE<span>POINT</span></h1>
+  <div class="stat"><div class="k">Track / car</div><div class="v" id="tc"></div></div>
+  <div class="stat"><div class="k" id="refk"></div><div class="v" id="reft"></div></div>
+  <div class="stat"><div class="k" id="cmpk"></div><div class="v" id="cmpt"></div></div>
+  <div class="stat"><div class="k">Gap</div><div class="v" id="gap"></div></div>
+  <div class="stat"><div class="k">Lost in braking zones</div><div class="v bad" id="zl"></div></div>
+</header>
+<main>
+  <section class="charts">
+    <div class="toolbar">
+      <button id="full">Full lap</button>
+      <span id="readout">Hover the charts · scroll to zoom · click a zone on the right</span>
+      <span class="legend"><span><i class="sw" style="background:var(--ref)"></i><span id="lr"></span></span><span><i class="sw" style="background:var(--cmp)"></i><span id="lc"></span></span></span>
+    </div>
+    <div class="label">Speed (km/h)</div>
+    <canvas id="c0" data-h="270"></canvas>
+    <div class="label">Time delta to best (s) · rising = losing time</div>
+    <canvas id="c1" data-h="140"></canvas>
+    <div class="label">Brake (solid) / throttle (dashed)</div>
+    <canvas id="c2" data-h="150"></canvas>
+  </section>
+  <aside>
+    <div class="mapwrap" id="mapwrap">
+      <div class="maphead"><span class="aside-h" style="margin:0">Track map · where time goes</span><button id="flip" title="Mirror the map if it looks backwards">Flip</button></div>
+      <canvas id="map"></canvas>
+      <div class="mapkey"><span><i class="sw" style="background:#ff5a36"></i>losing time</span><span><i class="sw" style="background:#3ddc97"></i>gaining</span><span>click map to jump there</span></div>
+    </div>
+    <div class="aside-h">Braking zones · biggest losses first</div>
+    <div id="zones"></div>
+    <div class="hint" id="hint"></div>
+  </aside>
+</main>
+<script>
+const D = __DATA__;
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = {ref: css('--ref'), cmp: css('--cmp'), delta: css('--delta'), line: css('--line'), mute: css('--mute')};
+const sign = x => (x > 0 ? '+' : '') + x.toFixed(3);
+
+$('tc').textContent = `${D.track} · ${D.car}`;
+$('refk').textContent = `Best · lap ${D.ref.lap}`; $('reft').textContent = D.ref.time;
+$('cmpk').textContent = `Analysing · lap ${D.cmp.lap}`; $('cmpt').textContent = D.cmp.time;
+$('gap').textContent = sign(D.total_delta) + 's';
+$('gap').className = 'v ' + (D.total_delta > 0 ? 'bad' : 'good');
+$('zl').textContent = D.zone_loss.toFixed(3) + 's';
+$('lr').textContent = `Best (lap ${D.ref.lap})`; $('lc').textContent = `Lap ${D.cmp.lap}`;
+$('hint').textContent = `Lap length ≈ ${D.length_m} m. Distances are measured along your best lap.`;
+
+const X = D.dist, LEN = X[X.length - 1];
+let x0 = 0, x1 = LEN, hover = null, active = null;
+const PADL = 46, PADR = 10, PADT = 8, PADB = 20;
+
+const charts = [
+  {el: $('c0'), series: [{y: D.ref.speed, c: C.ref, w: 1.6}, {y: D.cmp.speed, c: C.cmp, w: 1.8}]},
+  {el: $('c1'), series: [{y: D.delta, c: C.delta, w: 1.8}], zero: true, rel: true},
+  {el: $('c2'), series: [
+    {y: D.ref.gas, c: C.ref, w: 1.2, dash: [4, 4], a: .55}, {y: D.cmp.gas, c: C.cmp, w: 1.2, dash: [4, 4], a: .55},
+    {y: D.ref.brake, c: C.ref, w: 1.6}, {y: D.cmp.brake, c: C.cmp, w: 1.8}], fixed: [0, 1.05]},
+];
+
+function idxRange() {
+  let i0 = 0, i1 = X.length - 1;
+  while (i0 < i1 && X[i0 + 1] < x0) i0++;
+  while (i1 > i0 && X[i1 - 1] > x1) i1--;
+  return [i0, i1];
+}
+
+function draw() {
+  if (typeof drawMap === 'function') drawMap();
+  const [i0, i1] = idxRange();
+  for (const ch of charts) {
+    const cv = ch.el, dpr = window.devicePixelRatio || 1, h = +cv.dataset.h, W = cv.clientWidth;
+    cv.style.height = h + 'px'; cv.width = W * dpr; cv.height = h * dpr;
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pw = W - PADL - PADR, ph = h - PADT - PADB;
+    let lo, hi;
+    if (ch.fixed) [lo, hi] = ch.fixed;
+    else {
+      lo = Infinity; hi = -Infinity;
+      for (const s of ch.series) for (let i = i0; i <= i1; i++) { lo = Math.min(lo, s.y[i]); hi = Math.max(hi, s.y[i]); }
+      if (ch.rel) { // delta: show change from left edge of view so zoomed zones read clearly
+        lo = Math.min(lo, 0); hi = Math.max(hi, 0);
+      }
+      const pad = (hi - lo) * .08 || 1; lo -= pad; hi += pad;
+    }
+    const sx = d => PADL + (d - x0) / (x1 - x0) * pw, sy = v => PADT + (1 - (v - lo) / (hi - lo)) * ph;
+    ch.sx = sx;
+
+    // zones
+    for (const z of D.zones) {
+      if (z.end_m < x0 || z.start_m > x1) continue;
+      const a = sx(Math.max(z.start_m, x0)), b = sx(Math.min(z.end_m, x1));
+      g.fillStyle = z.n === active ? 'rgba(255,90,54,.16)' : 'rgba(255,255,255,.035)';
+      g.fillRect(a, PADT, b - a, ph);
+      if (ch === charts[0]) {
+        g.fillStyle = z.n === active ? C.cmp : C.mute; g.font = '600 11px system-ui';
+        g.fillText('Z' + z.n, a + 4, PADT + 12);
+      }
+    }
+    // grid
+    g.strokeStyle = C.line; g.lineWidth = 1; g.fillStyle = C.mute; g.font = '11px system-ui'; g.textAlign = 'right';
+    for (let k = 0; k <= 4; k++) {
+      const v = lo + (hi - lo) * k / 4, y = sy(v);
+      g.beginPath(); g.moveTo(PADL, y); g.lineTo(W - PADR, y); g.stroke();
+      g.fillText(ch.fixed ? Math.round(v * 100) + '%' : (Math.abs(hi - lo) < 5 ? v.toFixed(2) : Math.round(v)), PADL - 6, y + 4);
+    }
+    g.textAlign = 'center';
+    const span = x1 - x0, tick = span > 2500 ? 500 : span > 1000 ? 200 : span > 400 ? 100 : 50;
+    for (let d = Math.ceil(x0 / tick) * tick; d <= x1; d += tick) g.fillText(d + ' m', sx(d), h - 5);
+    if (ch.zero) { g.strokeStyle = '#4a535e'; g.beginPath(); g.moveTo(PADL, sy(0)); g.lineTo(W - PADR, sy(0)); g.stroke(); }
+
+    // series
+    g.save(); g.beginPath(); g.rect(PADL, PADT, pw, ph); g.clip();
+    for (const s of ch.series) {
+      g.strokeStyle = s.c; g.globalAlpha = s.a || 1; g.lineWidth = s.w; g.setLineDash(s.dash || []);
+      g.beginPath();
+      for (let i = i0; i <= i1; i++) { const x = sx(X[i]), y = sy(s.y[i]); i === i0 ? g.moveTo(x, y) : g.lineTo(x, y); }
+      g.stroke();
+    }
+    g.restore(); g.globalAlpha = 1; g.setLineDash([]);
+    if (hover !== null && hover >= x0 && hover <= x1) {
+      g.strokeStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.moveTo(sx(hover), PADT); g.lineTo(sx(hover), PADT + ph); g.stroke();
+    }
+  }
+}
+
+function nearest(d) {
+  let a = 0, b = X.length - 1;
+  while (b - a > 1) { const m = (a + b) >> 1; X[m] < d ? a = m : b = m; }
+  return d - X[a] < X[b] - d ? a : b;
+}
+
+for (const ch of charts) {
+  ch.el.addEventListener('mousemove', e => {
+    const r = ch.el.getBoundingClientRect(), pw = r.width - PADL - PADR;
+    hover = x0 + (e.clientX - r.left - PADL) / pw * (x1 - x0);
+    hover = Math.max(x0, Math.min(x1, hover));
+    const i = nearest(hover);
+    $('readout').textContent = `${Math.round(X[i])} m · best ${D.ref.speed[i].toFixed(0)} km/h · lap ${D.cmp.speed[i].toFixed(0)} km/h · Δ ${sign(D.delta[i])}s · brake ${Math.round(D.ref.brake[i]*100)}% / ${Math.round(D.cmp.brake[i]*100)}%`;
+    draw();
+  });
+  ch.el.addEventListener('mouseleave', () => { hover = null; draw(); });
+  ch.el.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = ch.el.getBoundingClientRect(), pw = r.width - PADL - PADR;
+    const c = x0 + (e.clientX - r.left - PADL) / pw * (x1 - x0);
+    const f = e.deltaY > 0 ? 1.2 : 1 / 1.2;
+    let n0 = c - (c - x0) * f, n1 = c + (x1 - c) * f;
+    if (n1 - n0 < 80) return;
+    x0 = Math.max(0, n0); x1 = Math.min(LEN, n1); draw();
+  }, {passive: false});
+}
+
+function renderZones() {
+  const box = $('zones'); box.innerHTML = '';
+  const fmtM = v => v === null ? '-' : (v > 0 ? '+' : '') + Math.round(v) + ' m';
+  for (const z of [...D.zones].sort((a, b) => b.time_lost - a.time_lost)) {
+    const el = document.createElement('div');
+    el.className = 'zone' + (z.n === active ? ' active' : '');
+    const cls = z.time_lost > 0.005 ? 'bad' : 'good';
+    el.innerHTML = `
+      <div class="top"><div><span class="name">Zone ${z.n}</span><span class="where">brake at ${Math.round(z.brake_m)} m · ${Math.round(z.entry_ref)}→${Math.round(z.vmin_ref)} km/h</span></div>
+      <span class="loss ${cls}">${sign(z.time_lost)}s</span></div>
+      <ul>${z.tips.map(t => `<li>${t}</li>`).join('')}</ul>
+      <div class="m"><div>Brake point<b>${fmtM(z.brake_diff_m)}</b></div>
+      <div>Min speed<b>${(z.vmin_cmp - z.vmin_ref > 0 ? '+' : '') + (z.vmin_cmp - z.vmin_ref).toFixed(0)} km/h</b></div>
+      <div>Full throttle<b>${fmtM(z.throttle_diff_m)}</b></div>
+      <div>Entry<b>${sign(z.entry_loss)}s</b></div><div>Exit<b>${sign(z.exit_loss)}s</b></div></div>`;
+    el.onclick = () => {
+      active = z.n; x0 = Math.max(0, z.start_m - 120); x1 = Math.min(LEN, z.end_m + 120);
+      renderZones(); draw();
+    };
+    box.appendChild(el);
+  }
+}
+
+
+// ---------- track map ----------
+const M = D.map; let flip = false;
+const mapCv = $('map');
+let mapPts = null;
+// rate of time loss per point (smoothed derivative of delta)
+const rate = (() => {
+  const n = D.delta.length, out = new Array(n).fill(0), w = 6;
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - w), b = Math.min(n - 1, i + w);
+    out[i] = (D.delta[b] - D.delta[a]) / Math.max(1, X[b] - X[a]);
+  }
+  const sorted = out.map(Math.abs).sort((p, q) => p - q);
+  const scale = sorted[Math.floor(sorted.length * 0.97)] || 1;
+  return out.map(v => Math.max(-1, Math.min(1, v / scale)));
+})();
+function mix(a, b, f) { return a.map((v, i) => Math.round(v + (b[i] - v) * f)); }
+function rateColor(v) {
+  const base = [70, 78, 90];
+  const c = v > 0 ? mix(base, [255, 90, 54], v) : mix(base, [61, 220, 151], -v);
+  return `rgb(${c})`;
+}
+function drawMap() {
+  if (!M) { $('mapwrap').style.display = 'none'; return; }
+  const dpr = window.devicePixelRatio || 1, W = mapCv.clientWidth, H = 300;
+  mapCv.width = W * dpr; mapCv.height = H * dpr;
+  const g = mapCv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const xs = M.x.map(v => flip ? -v : v), zs = M.z;
+  const minx = Math.min(...xs), maxx = Math.max(...xs), minz = Math.min(...zs), maxz = Math.max(...zs);
+  const pad = 18, s = Math.min((W - 2 * pad) / (maxx - minx || 1), (H - 2 * pad) / (maxz - minz || 1));
+  const ox = (W - (maxx - minx) * s) / 2, oz = (H - (maxz - minz) * s) / 2;
+  mapPts = xs.map((x, i) => [ox + (x - minx) * s, oz + (zs[i] - minz) * s]);
+  const n = mapPts.length;
+  // track underlay
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  g.strokeStyle = '#0a0c0f'; g.lineWidth = 11; g.beginPath();
+  mapPts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.stroke();
+  // active zone outline
+  const az = D.zones.find(z => z.n === active);
+  if (az) {
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 10; g.beginPath(); let started = false;
+    for (let i = 0; i < n; i++) if (X[i] >= az.start_m && X[i] <= az.end_m) { started ? g.lineTo(...mapPts[i]) : g.moveTo(...mapPts[i]); started = true; }
+    g.stroke();
+  }
+  // coloured by gain / loss
+  g.lineWidth = 5;
+  for (let i = 1; i < n; i++) {
+    g.strokeStyle = rateColor(rate[i]); g.beginPath(); g.moveTo(...mapPts[i - 1]); g.lineTo(...mapPts[i]); g.stroke();
+  }
+  // start / finish
+  const [sx0, sy0] = mapPts[0], [sx1, sy1] = mapPts[3];
+  const ang = Math.atan2(sy1 - sy0, sx1 - sx0) + Math.PI / 2;
+  g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath();
+  g.moveTo(sx0 - 9 * Math.cos(ang), sy0 - 9 * Math.sin(ang)); g.lineTo(sx0 + 9 * Math.cos(ang), sy0 + 9 * Math.sin(ang)); g.stroke();
+  // zone labels at brake points
+  g.font = '600 11px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const z of D.zones) {
+    const [x, y] = mapPts[nearest(z.brake_m)];
+    const on = z.n === active;
+    g.fillStyle = on ? '#ff5a36' : '#232a33'; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill();
+    g.fillStyle = on ? '#fff' : '#cfd5db'; g.fillText(z.n, x, y + 0.5);
+  }
+  // hover dot follows the charts
+  if (hover !== null) {
+    const [x, y] = mapPts[nearest(hover)];
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill();
+    g.strokeStyle = '#ff5a36'; g.lineWidth = 2; g.stroke();
+  }
+}
+mapCv.addEventListener('click', e => {
+  if (!mapPts) return;
+  const r = mapCv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  let best = 0, bd = Infinity;
+  mapPts.forEach(([x, y], i) => { const d = (x - mx) ** 2 + (y - my) ** 2; if (d < bd) { bd = d; best = i; } });
+  const c = X[best]; x0 = Math.max(0, c - 250); x1 = Math.min(LEN, c + 250);
+  hover = c; active = null; renderZones(); draw();
+});
+mapCv.addEventListener('mousemove', e => {
+  if (!mapPts) return;
+  const r = mapCv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  let best = 0, bd = Infinity;
+  mapPts.forEach(([x, y], i) => { const d = (x - mx) ** 2 + (y - my) ** 2; if (d < bd) { bd = d; best = i; } });
+  if (bd < 400) { hover = X[best]; draw(); }
+});
+$('flip').onclick = () => { flip = !flip; drawMap(); };
+
+$('full').onclick = () => { x0 = 0; x1 = LEN; active = null; renderZones(); draw(); };
+window.addEventListener('resize', draw);
+renderZones(); draw();
+</script>
+</body>
+</html>
